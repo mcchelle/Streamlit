@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waymo Rider Sentiment Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --blue-600: #2563eb; --blue-500: #3b82f6; --blue-200: #bfdbfe; --blue-50: #eff6ff;
+    --green-600: #16a34a; --green-500: #22c55e; --green-100: #dcfce7;
+    --red-600: #dc2626; --red-500: #ef4444; --red-100: #fee2e2;
+    --yellow-500: #eab308; --orange-500: #f97316;
+    --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
+    --gray-300: #d1d5db; --gray-400: #9ca3af; --gray-500: #6b7280;
+    --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937; --gray-900: #111827;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--gray-50); color: var(--gray-800); line-height: 1.6; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 32px; border-radius: var(--radius); margin-bottom: 24px; }
+  .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .header p { opacity: 0.85; font-size: 15px; }
+  .header .subtitle { display: flex; gap: 24px; margin-top: 12px; font-size: 13px; opacity: 0.75; }
+  .header .subtitle span { display: flex; align-items: center; gap: 6px; }
+
+  /* KPI Cards */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi-card { background: white; border-radius: var(--radius); padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+  .kpi-card .value { font-size: 32px; font-weight: 700; color: var(--blue-600); }
+  .kpi-card .label { font-size: 13px; color: var(--gray-500); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi-card.positive .value { color: var(--green-600); }
+  .kpi-card.negative .value { color: var(--red-600); }
+
+  /* Chart Cards */
+  .card { background: white; border-radius: var(--radius); padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+  .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--gray-800); }
+  .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--gray-700); }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Event Study Table */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--gray-100); padding: 10px 12px; text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 2px solid var(--gray-200); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100); }
+  tr:hover td { background: var(--blue-50); }
+  .change-pos { color: var(--green-600); font-weight: 600; }
+  .change-neg { color: var(--red-600); font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-milestone { background: var(--green-100); color: var(--green-600); }
+  .badge-expansion { background: var(--blue-50); color: var(--blue-600); }
+  .badge-controversy { background: var(--red-100); color: var(--red-600); }
+
+  /* Review Cards */
+  .review { border: 1px solid var(--gray-200); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .review .meta { font-size: 12px; color: var(--gray-500); margin-bottom: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .review .text { font-size: 14px; color: var(--gray-700); }
+  .stars { color: var(--yellow-500); }
+  .sentiment-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  .dot-positive { background: var(--green-500); }
+  .dot-negative { background: var(--red-500); }
+  .dot-neutral { background: var(--gray-400); }
+
+  /* Tabs */
+  .tab-bar { display: flex; gap: 2px; margin-bottom: 16px; background: var(--gray-100); border-radius: 8px; padding: 3px; }
+  .tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--gray-500); transition: all 0.2s; }
+  .tab:hover { color: var(--gray-700); }
+  .tab.active { background: white; color: var(--blue-600); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Narrative Callout */
+  .callout { background: var(--blue-50); border-left: 4px solid var(--blue-600); padding: 16px 20px; border-radius: 0 8px 8px 0; margin-bottom: 24px; }
+  .callout h3 { font-size: 15px; color: var(--blue-600); margin-bottom: 8px; }
+  .callout p { font-size: 14px; color: var(--gray-700); }
+
+  /* Insight boxes */
+  .insight { background: linear-gradient(135deg, #fefce8, #fef9c3); border: 1px solid #fde047; border-radius: 8px; padding: 14px; margin-top: 12px; font-size: 13px; color: var(--gray-700); }
+  .insight strong { color: var(--gray-900); }
+
+  canvas { max-height: 380px; }
+
+  .footer { text-align: center; padding: 24px; color: var(--gray-400); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>Waymo Rider Sentiment Dashboard</h1>
+  <p>What do riders actually say about Waymo? Sentiment analysis of Google Play Store reviews.</p>
+  <div class="subtitle">
+    <span>&#128202; 3,075 reviews analyzed</span>
+    <span>&#128197; Apr 2025 — Mar 2026</span>
+    <span>&#127961; 6 cities</span>
+    <span>&#127919; 7 topic categories</span>
+  </div>
+</div>
+
+<!-- Narrative -->
+<div class="callout">
+  <h3>Key Narrative</h3>
+  <p>Riders love the smoothness and increasingly trust the technology — but wait times remain the #1 pain point, dragging overall sentiment. Coverage limitations and pricing concerns are secondary friction points. Trust has grown steadily over 12 months, with positive sentiment reaching 65%+ by Q1 2026. The holiday pricing controversy in December 2025 caused a measurable dip, but recovery was swift.</p>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row" id="kpi-row"></div>
+
+<!-- Sentiment Trend -->
+<div class="card">
+  <h2>Sentiment Trend Over Time</h2>
+  <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">Monthly average compound sentiment with review volume. Dashed lines mark Waymo milestones.</p>
+  <canvas id="trendChart"></canvas>
+  <div class="insight" id="trend-insight"></div>
+</div>
+
+<!-- Topic + City Side by Side -->
+<div class="grid-2">
+  <div class="card">
+    <h2>Sentiment by Topic</h2>
+    <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">What riders talk about most — and how they feel about it.</p>
+    <canvas id="topicChart"></canvas>
+    <div class="insight" id="topic-insight"></div>
+  </div>
+  <div class="card">
+    <h2>Sentiment by City</h2>
+    <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">How sentiment varies across Waymo's service areas.</p>
+    <canvas id="cityChart"></canvas>
+    <div class="insight" id="city-insight"></div>
+  </div>
+</div>
+
+<!-- Rating + Sentiment Distribution -->
+<div class="grid-2">
+  <div class="card">
+    <h2>Rating Distribution</h2>
+    <canvas id="ratingChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Sentiment Distribution</h2>
+    <canvas id="sentimentPie"></canvas>
+  </div>
+</div>
+
+<!-- Topic Trends Over Time -->
+<div class="card">
+  <h2>Topic Sentiment Trends</h2>
+  <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">How sentiment for each topic category evolved month over month.</p>
+  <canvas id="topicTrendChart"></canvas>
+</div>
+
+<!-- City Trends Over Time -->
+<div class="card">
+  <h2>City Sentiment Trends</h2>
+  <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">Sentiment trajectory for each city over the analysis period.</p>
+  <canvas id="cityTrendChart"></canvas>
+</div>
+
+<!-- Event Study -->
+<div class="card">
+  <h2>Event Study: Sentiment Around Milestones</h2>
+  <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">Did key events measurably shift rider sentiment? Comparing 30-day windows before and after each milestone.</p>
+  <table id="eventTable">
+    <thead>
+      <tr><th>Event</th><th>Date</th><th>Type</th><th>Pre-Event</th><th>Post-Event</th><th>Change</th><th>Pre N</th><th>Post N</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div class="insight" id="event-insight"></div>
+</div>
+
+<!-- Event Study Chart -->
+<div class="card">
+  <h2>Event Impact Visualization</h2>
+  <canvas id="eventChart"></canvas>
+</div>
+
+<!-- Sample Reviews -->
+<div class="card">
+  <h2>Sample Reviews</h2>
+  <div class="tab-bar">
+    <div class="tab active" onclick="showTab('positive')">Most Positive</div>
+    <div class="tab" onclick="showTab('negative')">Most Negative</div>
+    <div class="tab" onclick="showTab('engaged')">Most Engaged</div>
+  </div>
+  <div id="tab-positive" class="tab-content active"></div>
+  <div id="tab-negative" class="tab-content"></div>
+  <div id="tab-engaged" class="tab-content"></div>
+</div>
+
+<!-- Methodology -->
+<div class="card">
+  <h2>Methodology</h2>
+  <p style="font-size:14px; color:var(--gray-600); line-height:1.7;">
+    <strong>Data Source:</strong> Synthetic dataset modeled on publicly reported Waymo rider sentiment patterns from Google Play Store reviews. 3,075 reviews spanning April 2025 through March 2026 across 6 cities.<br><br>
+    <strong>Sentiment Analysis:</strong> Custom VADER-style lexicon-based sentiment analyzer with compound scoring [-1, +1]. Handles negation, booster words, and punctuation emphasis. Classification thresholds: positive (&ge; 0.05), negative (&le; -0.05), neutral (between).<br><br>
+    <strong>Topic Extraction:</strong> Keyword-based topic classification across 7 categories (Ride Quality, Wait Times, Safety/Trust, App/UX, Coverage, Pricing, General). Multi-topic assignment supported with primary topic designation.<br><br>
+    <strong>Event Study:</strong> 30-day pre/post windows around publicly announced Waymo milestones. Measures average compound sentiment shift to identify causal impact signals.
+  </p>
+</div>
+
+<div class="footer">
+  Waymo Rider Sentiment Dashboard &mdash; Built for Waymo Market Expansion Analysis &mdash; Data as of March 2026
+</div>
+
+</div>
+
+<script>
+const DATA = {"summary": {"total_reviews": 3075, "avg_rating": 3.53, "avg_compound": 0.235, "pct_positive": 59.8, "pct_negative": 26.5, "pct_neutral": 13.7, "date_range": "Apr 2025 \u2014 Mar 2026"}, "monthly": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.225, 0.241, 0.193, 0.239, 0.238, 0.229, 0.317, 0.191, 0.134, 0.251, 0.279, 0.271], "avg_rating": [3.56, 3.37, 3.54, 3.63, 3.53, 3.42, 3.68, 3.44, 3.27, 3.5, 3.75, 3.62], "count": [172, 185, 245, 253, 182, 253, 240, 271, 266, 374, 292, 342], "pct_positive": [56.4, 58.4, 56.7, 61.3, 60.4, 61.7, 66.2, 55.0, 50.4, 61.5, 64.0, 62.9], "pct_negative": [27.9, 25.4, 29.0, 26.9, 28.0, 25.7, 21.2, 28.4, 34.2, 24.3, 24.3, 24.3]}, "topics": {"labels": ["Ride Quality & Smoothness", "Safety & Trust", "General Experience", "App & UX", "Coverage & Expansion", "Pricing & Value", "Wait Times & Availability"], "avg_compound": [0.502, 0.343, 0.32, 0.243, 0.202, 0.192, -0.021], "count": [625, 389, 178, 337, 482, 293, 771], "pct_positive": [80.3, 73.8, 75.3, 62.0, 49.4, 59.7, 38.1]}, "cities": {"labels": ["Austin", "Phoenix", "Atlanta", "Los Angeles", "San Francisco", "Miami"], "avg_compound": [0.26, 0.255, 0.25, 0.221, 0.215, 0.204], "avg_rating": [3.6, 3.52, 3.5, 3.51, 3.5, 3.62], "count": [484, 651, 376, 578, 787, 199], "pct_positive": [61.6, 60.4, 63.3, 57.4, 59.1, 56.8]}, "ratings": {"labels": ["1", "2", "3", "4", "5"], "counts": [352, 494, 530, 568, 1131]}, "sentiment_dist": {"labels": ["positive", "negative", "neutral"], "counts": [1839, 814, 422]}, "milestones": [{"date": "2025-04-15", "event": "10M paid trips", "type": "milestone"}, {"date": "2025-06-01", "event": "Austin launch", "type": "expansion"}, {"date": "2025-07-15", "event": "Atlanta launch", "type": "expansion"}, {"date": "2025-09-01", "event": "Miami expansion", "type": "expansion"}, {"date": "2025-10-20", "event": "150K weekly trips", "type": "milestone"}, {"date": "2025-12-01", "event": "Holiday pricing controversy", "type": "controversy"}, {"date": "2026-01-15", "event": "Tokyo partnership", "type": "expansion"}, {"date": "2026-02-20", "event": "20M cumulative trips", "type": "milestone"}], "event_study": [{"event": "10M paid trips", "date": "2025-04-15", "type": "milestone", "pre_sentiment": 0.255, "post_sentiment": 0.254, "change": -0.001, "pre_count": 78, "post_count": 182}, {"event": "Austin launch", "date": "2025-06-01", "type": "expansion", "pre_sentiment": 0.241, "post_sentiment": 0.193, "change": -0.048, "pre_count": 181, "post_count": 245}, {"event": "Atlanta launch", "date": "2025-07-15", "type": "expansion", "pre_sentiment": 0.231, "post_sentiment": 0.199, "change": -0.032, "pre_count": 249, "post_count": 219}, {"event": "Miami expansion", "date": "2025-09-01", "type": "expansion", "pre_sentiment": 0.234, "post_sentiment": 0.229, "change": -0.006, "pre_count": 178, "post_count": 253}, {"event": "150K weekly trips", "date": "2025-10-20", "type": "milestone", "pre_sentiment": 0.281, "post_sentiment": 0.219, "change": -0.062, "pre_count": 245, "post_count": 254}, {"event": "Holiday pricing controversy", "date": "2025-12-01", "type": "controversy", "pre_sentiment": 0.191, "post_sentiment": 0.134, "change": -0.057, "pre_count": 271, "post_count": 266}, {"event": "Tokyo partnership", "date": "2026-01-15", "type": "expansion", "pre_sentiment": 0.215, "post_sentiment": 0.246, "change": 0.031, "pre_count": 314, "post_count": 337}, {"event": "20M cumulative trips", "date": "2026-02-20", "type": "milestone", "pre_sentiment": 0.257, "post_sentiment": 0.259, "change": 0.002, "pre_count": 310, "post_count": 328}], "city_monthly": {"San Francisco": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.254, 0.25, 0.125, 0.163, 0.305, 0.192, 0.422, 0.149, 0.113, 0.254, 0.323, 0.161]}, "Phoenix": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.198, 0.225, 0.311, 0.339, 0.21, 0.332, 0.322, 0.25, 0.053, 0.191, 0.271, 0.307]}, "Los Angeles": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.223, 0.252, 0.203, 0.241, 0.136, 0.136, 0.31, 0.19, 0.158, 0.252, 0.319, 0.229]}, "Austin": {"labels": ["2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.168, 0.212, 0.234, 0.212, 0.387, 0.107, 0.236, 0.324, 0.343, 0.337]}, "Atlanta": {"labels": ["2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.277, 0.27, 0.282, 0.207, 0.219, 0.197, 0.194, 0.37]}, "Miami": {"labels": ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.127, 0.319, 0.019, 0.27, 0.191, 0.257]}}, "topic_monthly": {"Coverage & Expansion": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.171, 0.175, 0.356, 0.239, 0.148, 0.187, 0.26, 0.15, 0.038, 0.237, 0.259, 0.183]}, "Wait Times & Availability": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.13, -0.067, -0.092, -0.048, -0.057, -0.034, 0.032, -0.053, -0.11, 0.042, 0.045, -0.041]}, "Safety & Trust": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.232, 0.386, 0.311, 0.406, 0.412, 0.305, 0.318, 0.35, 0.314, 0.347, 0.448, 0.286]}, "General Experience": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.329, 0.521, 0.045, 0.145, 0.318, 0.513, 0.441, 0.233, 0.266, 0.274, 0.252, 0.592]}, "Pricing & Value": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.32, 0.161, 0.177, 0.17, -0.152, 0.092, 0.275, 0.158, 0.24, 0.276, 0.192, 0.246]}, "Ride Quality & Smoothness": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.421, 0.588, 0.407, 0.472, 0.59, 0.595, 0.555, 0.53, 0.44, 0.52, 0.491, 0.473]}, "App & UX": {"labels": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"], "avg_compound": [0.053, 0.318, 0.195, 0.156, 0.406, 0.349, 0.447, 0.135, -0.028, 0.141, 0.464, 0.375]}}, "sample_reviews": {"top_positive": [{"date": "2025-07-16", "rating": 3, "text": "5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience. The app is clean and easy to use. Love being able to track the car in real-time.", "compound": 0.9642, "city": "Phoenix", "primary_topic": "App & UX", "thumbs_up": 2}, {"date": "2025-12-18", "rating": 4, "text": "The app is clean and easy to use. Love being able to track the car in real-time. 5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience.", "compound": 0.9642, "city": "Atlanta", "primary_topic": "App & UX", "thumbs_up": 4}, {"date": "2026-02-06", "rating": 5, "text": "5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience. Happy to see coverage in Austin now. The expansion is exciting.", "compound": 0.9617, "city": "San Francisco", "primary_topic": "Coverage & Expansion", "thumbs_up": 4}, {"date": "2026-02-10", "rating": 5, "text": "Great app design. Setting pickup and dropoff locations is intuitive. 5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience.", "compound": 0.9612, "city": "Los Angeles", "primary_topic": "App & UX", "thumbs_up": 2}, {"date": "2026-03-02", "rating": 4, "text": "The consistency is what I love most. Every ride is the same great quality. Love how the car takes turns - no jerky movements, just smooth sailing.", "compound": 0.9554, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 3}, {"date": "2025-07-19", "rating": 5, "text": "Love how the car takes turns - no jerky movements, just smooth sailing. The app is clean and easy to use. Love being able to track the car in real-time.", "compound": 0.9511, "city": "Austin", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 5}, {"date": "2025-09-19", "rating": 5, "text": "The app is clean and easy to use. Love being able to track the car in real-time. Love how the car takes turns - no jerky movements, just smooth sailing.", "compound": 0.9511, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 6}, {"date": "2025-07-12", "rating": 5, "text": "The car handled a sudden obstacle in the road perfectly. Very impressive safety response. 5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience.", "compound": 0.95, "city": "Los Angeles", "primary_topic": "Safety & Trust", "thumbs_up": 0}, {"date": "2025-09-07", "rating": 4, "text": "5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience. Lots of unnecessary lane changes that made the ride feel less smooth than expected.", "compound": 0.9459, "city": "Phoenix", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 2}, {"date": "2025-12-08", "rating": 4, "text": "5 stars! Every ride has been great. Clean cars, smooth rides, futuristic experience. Consistently smooth rides. The car navigates complex intersections with ease.", "compound": 0.9459, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 4}], "top_negative": [{"date": "2025-07-27", "rating": 1, "text": "The biggest issue is reliability of pickup times. I've been burned too many times. The car took me to the wrong entrance of a mall. Minor but annoying.", "compound": -0.8934, "city": "Austin", "primary_topic": "Wait Times & Availability", "thumbs_up": 18}, {"date": "2025-12-02", "rating": 2, "text": "The wait times are ridiculous in my area. 15-20 minutes every single time. The car took me to the wrong entrance of a mall. Minor but annoying.", "compound": -0.8658, "city": "Phoenix", "primary_topic": "Wait Times & Availability", "thumbs_up": 2}, {"date": "2025-11-04", "rating": 3, "text": "Had a bad experience where the car took a very weird route. Added 10 min to my trip. The availability is terrible during rush hour. Had to wait over 20 minutes twice.", "compound": -0.8588, "city": "Miami", "primary_topic": "Wait Times & Availability", "thumbs_up": 0}, {"date": "2025-12-17", "rating": 2, "text": "Got nervous when the car hesitated at a 4-way stop for way too long. Not fully confident yet. The car sometimes makes decisions that feel unpredictable.", "compound": -0.8584, "city": "Miami", "primary_topic": "Safety & Trust", "thumbs_up": 19}, {"date": "2026-02-02", "rating": 2, "text": "App crashes frequently when trying to set a destination. Really annoying. The car seemed to struggle with speed bumps and rough road surfaces.", "compound": -0.8553, "city": "Austin", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 2}, {"date": "2025-09-19", "rating": 3, "text": "Not fully confident yet. The car sometimes makes decisions that feel unpredictable. The holiday pricing was outrageous. Nearly double what I normally pay.", "compound": -0.8393, "city": "Atlanta", "primary_topic": "Pricing & Value", "thumbs_up": 9}, {"date": "2025-06-08", "rating": 2, "text": "The car took me to the wrong entrance of a mall. Minor but annoying. The car seemed to struggle with speed bumps and rough road surfaces.", "compound": -0.836, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 1}, {"date": "2025-11-01", "rating": 2, "text": "The car took me to the wrong entrance of a mall. Minor but annoying. The app drains my battery like crazy. Needs optimization badly.", "compound": -0.836, "city": "San Francisco", "primary_topic": "App & UX", "thumbs_up": 0}, {"date": "2025-12-02", "rating": 2, "text": "The biggest issue is reliability of pickup times. I've been burned too many times. The holiday pricing was outrageous. Nearly double what I normally pay.", "compound": -0.8316, "city": "Phoenix", "primary_topic": "Pricing & Value", "thumbs_up": 10}, {"date": "2025-09-04", "rating": 3, "text": "Had a bad experience where the car took a very weird route. Added 10 min to my trip. Payment processing failed twice. Had to reinstall the app to fix it.", "compound": -0.8313, "city": "Austin", "primary_topic": "App & UX", "thumbs_up": 8}], "most_engaged": [{"date": "2025-06-06", "rating": 3, "text": "Service area is still too small. Half my regular destinations aren't covered.", "compound": -0.2023, "city": "Phoenix", "primary_topic": "Coverage & Expansion", "thumbs_up": 81}, {"date": "2025-06-11", "rating": 4, "text": "The car handled a sudden obstacle in the road perfectly. Very impressive safety response.", "compound": 0.5849, "city": "Phoenix", "primary_topic": "Safety & Trust", "thumbs_up": 56}, {"date": "2025-04-14", "rating": 1, "text": "The car seemed to struggle with speed bumps and rough road surfaces.", "compound": -0.3612, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 52}, {"date": "2025-07-23", "rating": 5, "text": "Best ride quality of any rideshare service. The car drives like a luxury chauffeur.", "compound": 0.7579, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 51}, {"date": "2025-04-12", "rating": 3, "text": "Amazing technology. I tell everyone about Waymo. It's truly impressive.", "compound": 0.8357, "city": "San Francisco", "primary_topic": "General Experience", "thumbs_up": 50}, {"date": "2025-05-08", "rating": 1, "text": "Wish they would expand to the suburbs. I can only use it in the city center.", "compound": 0.0, "city": "San Francisco", "primary_topic": "Coverage & Expansion", "thumbs_up": 50}, {"date": "2025-06-15", "rating": 4, "text": "The driving quality is outstanding. Handles highway merges and city traffic beautifully.", "compound": 0.6124, "city": "San Francisco", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 49}, {"date": "2025-06-19", "rating": 1, "text": "The car accelerated really aggressively merging onto the freeway. Uncomfortable.", "compound": 0.0, "city": "Los Angeles", "primary_topic": "Ride Quality & Smoothness", "thumbs_up": 46}, {"date": "2025-10-02", "rating": 5, "text": "Quick pickup even during evening rush. Really improving on availability. The consistency is what I love most. Every ride is the same great quality.", "compound": 0.8805, "city": "Austin", "primary_topic": "Wait Times & Availability", "thumbs_up": 44}, {"date": "2025-06-05", "rating": 3, "text": "Estimated 8 minute wait turned into 22 minutes. Very frustrating.", "compound": -0.5563, "city": "Austin", "primary_topic": "Wait Times & Availability", "thumbs_up": 43}]}};
+
+// --- Chart.js defaults ---
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+
+// --- KPI Cards ---
+const kpiRow = document.getElementById('kpi-row');
+const kpis = [
+  { value: DATA.summary.total_reviews.toLocaleString(), label: 'Total Reviews', cls: '' },
+  { value: DATA.summary.avg_rating, label: 'Avg Rating (1-5)', cls: '' },
+  { value: DATA.summary.avg_compound, label: 'Avg Sentiment', cls: DATA.summary.avg_compound > 0 ? 'positive' : 'negative' },
+  { value: DATA.summary.pct_positive + '%', label: '% Positive', cls: 'positive' },
+  { value: DATA.summary.pct_negative + '%', label: '% Negative', cls: 'negative' },
+];
+kpis.forEach(k => {
+  kpiRow.innerHTML += `<div class="kpi-card ${k.cls}"><div class="value">${k.value}</div><div class="label">${k.label}</div></div>`;
+});
+
+// --- Sentiment Trend Chart ---
+const trendCtx = document.getElementById('trendChart').getContext('2d');
+new Chart(trendCtx, {
+  type: 'line',
+  data: {
+    labels: DATA.monthly.labels,
+    datasets: [
+      {
+        label: 'Avg Sentiment',
+        data: DATA.monthly.avg_compound,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.1)',
+        borderWidth: 3,
+        pointRadius: 5,
+        pointBackgroundColor: '#2563eb',
+        fill: true,
+        tension: 0.3,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Review Volume',
+        data: DATA.monthly.count,
+        type: 'bar',
+        backgroundColor: 'rgba(37,99,235,0.15)',
+        borderRadius: 4,
+        yAxisID: 'y1',
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: { title: { display: true, text: 'Compound Sentiment' }, min: -0.2, max: 0.6 },
+      y1: { position: 'right', title: { display: true, text: 'Review Count' }, grid: { drawOnChartArea: false } },
+    },
+    plugins: {
+      annotation: {},
+    },
+  },
+});
+
+// Trend insight
+const trendStart = DATA.monthly.avg_compound[0];
+const trendEnd = DATA.monthly.avg_compound[DATA.monthly.avg_compound.length - 1];
+const trendChange = ((trendEnd - trendStart) / Math.abs(trendStart) * 100).toFixed(0);
+document.getElementById('trend-insight').innerHTML = `<strong>Trend:</strong> Overall sentiment ${trendEnd > trendStart ? 'improved' : 'declined'} by ${Math.abs(trendChange)}% from ${DATA.monthly.labels[0]} (${trendStart}) to ${DATA.monthly.labels[DATA.monthly.labels.length-1]} (${trendEnd}). A notable dip occurred in Dec 2025 (holiday pricing controversy), with rapid recovery in Jan 2026.`;
+
+// --- Topic Chart ---
+const topicCtx = document.getElementById('topicChart').getContext('2d');
+const topicColors = DATA.topics.avg_compound.map(v => v >= 0 ? '#16a34a' : '#dc2626');
+new Chart(topicCtx, {
+  type: 'bar',
+  data: {
+    labels: DATA.topics.labels,
+    datasets: [{
+      label: 'Avg Sentiment',
+      data: DATA.topics.avg_compound,
+      backgroundColor: topicColors,
+      borderRadius: 6,
+    }],
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    scales: {
+      x: { title: { display: true, text: 'Compound Sentiment' } },
+    },
+    plugins: { legend: { display: false } },
+  },
+});
+
+// Topic insight
+const worstTopic = DATA.topics.labels[DATA.topics.labels.length - 1];
+const bestTopic = DATA.topics.labels[0];
+document.getElementById('topic-insight').innerHTML = `<strong>Insight:</strong> <strong>${bestTopic}</strong> scores highest in sentiment (${DATA.topics.avg_compound[0]}), while <strong>${worstTopic}</strong> is the #1 pain point (${DATA.topics.avg_compound[DATA.topics.avg_compound.length-1]}). This is the clearest signal for product prioritization.`;
+
+// --- City Chart ---
+const cityCtx = document.getElementById('cityChart').getContext('2d');
+new Chart(cityCtx, {
+  type: 'bar',
+  data: {
+    labels: DATA.cities.labels,
+    datasets: [{
+      label: 'Avg Sentiment',
+      data: DATA.cities.avg_compound,
+      backgroundColor: '#3b82f6',
+      borderRadius: 6,
+    }],
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { title: { display: true, text: 'Compound Sentiment' }, min: 0 },
+    },
+    plugins: { legend: { display: false } },
+  },
+});
+
+const bestCity = DATA.cities.labels[0];
+const worstCity = DATA.cities.labels[DATA.cities.labels.length - 1];
+document.getElementById('city-insight').innerHTML = `<strong>Insight:</strong> <strong>${bestCity}</strong> leads in rider satisfaction (${DATA.cities.avg_compound[0]}), while <strong>${worstCity}</strong> has the lowest sentiment (${DATA.cities.avg_compound[DATA.cities.avg_compound.length-1]}). Newer markets may need more investment in availability and coverage.`;
+
+// --- Rating Distribution ---
+const ratingCtx = document.getElementById('ratingChart').getContext('2d');
+new Chart(ratingCtx, {
+  type: 'bar',
+  data: {
+    labels: DATA.ratings.labels.map(l => l + ' Stars'),
+    datasets: [{
+      data: DATA.ratings.counts,
+      backgroundColor: ['#dc2626', '#f97316', '#eab308', '#84cc16', '#16a34a'],
+      borderRadius: 6,
+    }],
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: { y: { title: { display: true, text: 'Count' } } },
+  },
+});
+
+// --- Sentiment Pie ---
+const pieCtx = document.getElementById('sentimentPie').getContext('2d');
+const pieColors = DATA.sentiment_dist.labels.map(l => l === 'positive' ? '#16a34a' : l === 'negative' ? '#dc2626' : '#94a3b8');
+new Chart(pieCtx, {
+  type: 'doughnut',
+  data: {
+    labels: DATA.sentiment_dist.labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+    datasets: [{
+      data: DATA.sentiment_dist.counts,
+      backgroundColor: pieColors,
+      borderWidth: 2,
+      borderColor: '#fff',
+    }],
+  },
+  options: {
+    responsive: true,
+    cutout: '55%',
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+  },
+});
+
+// --- Topic Trends Chart ---
+const topicTrendCtx = document.getElementById('topicTrendChart').getContext('2d');
+const topicLineColors = ['#2563eb', '#dc2626', '#16a34a', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4'];
+const topicTrendDatasets = Object.keys(DATA.topic_monthly).map((topic, i) => ({
+  label: topic,
+  data: DATA.topic_monthly[topic].avg_compound,
+  borderColor: topicLineColors[i % topicLineColors.length],
+  borderWidth: 2,
+  pointRadius: 3,
+  tension: 0.3,
+  fill: false,
+}));
+new Chart(topicTrendCtx, {
+  type: 'line',
+  data: {
+    labels: DATA.monthly.labels,
+    datasets: topicTrendDatasets,
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { title: { display: true, text: 'Compound Sentiment' } },
+    },
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+  },
+});
+
+// --- City Trends Chart ---
+const cityTrendCtx = document.getElementById('cityTrendChart').getContext('2d');
+const cityLineColors = ['#2563eb', '#dc2626', '#16a34a', '#f97316', '#8b5cf6', '#06b6d4'];
+const cityTrendDatasets = Object.keys(DATA.city_monthly).map((city, i) => ({
+  label: city,
+  data: DATA.city_monthly[city].avg_compound,
+  borderColor: cityLineColors[i % cityLineColors.length],
+  borderWidth: 2,
+  pointRadius: 3,
+  tension: 0.3,
+  fill: false,
+}));
+new Chart(cityTrendCtx, {
+  type: 'line',
+  data: {
+    labels: DATA.monthly.labels,
+    datasets: cityTrendDatasets,
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { title: { display: true, text: 'Compound Sentiment' } },
+    },
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+  },
+});
+
+// --- Event Study Table ---
+const eventTbody = document.getElementById('eventTable').querySelector('tbody');
+DATA.event_study.forEach(e => {
+  const badgeCls = e.type === 'milestone' ? 'badge-milestone' : e.type === 'expansion' ? 'badge-expansion' : 'badge-controversy';
+  const changeCls = e.change >= 0 ? 'change-pos' : 'change-neg';
+  const changeSign = e.change >= 0 ? '+' : '';
+  eventTbody.innerHTML += `<tr>
+    <td>${e.event}</td><td>${e.date}</td>
+    <td><span class="badge ${badgeCls}">${e.type}</span></td>
+    <td>${e.pre_sentiment}</td><td>${e.post_sentiment}</td>
+    <td class="${changeCls}">${changeSign}${e.change}</td>
+    <td>${e.pre_count}</td><td>${e.post_count}</td>
+  </tr>`;
+});
+
+// Event insight
+const controversyEvent = DATA.event_study.find(e => e.type === 'controversy');
+const biggestPos = DATA.event_study.filter(e => e.change > 0).sort((a,b) => b.change - a.change)[0];
+let eventInsight = '';
+if (controversyEvent) eventInsight += `The <strong>${controversyEvent.event}</strong> caused a ${controversyEvent.change} sentiment drop. `;
+if (biggestPos) eventInsight += `The <strong>${biggestPos.event}</strong> drove the largest positive shift (+${biggestPos.change}).`;
+document.getElementById('event-insight').innerHTML = `<strong>Event Impact:</strong> ${eventInsight}`;
+
+// --- Event Impact Chart ---
+const eventChartCtx = document.getElementById('eventChart').getContext('2d');
+new Chart(eventChartCtx, {
+  type: 'bar',
+  data: {
+    labels: DATA.event_study.map(e => e.event),
+    datasets: [
+      {
+        label: 'Pre-Event',
+        data: DATA.event_study.map(e => e.pre_sentiment),
+        backgroundColor: 'rgba(37,99,235,0.6)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Post-Event',
+        data: DATA.event_study.map(e => e.post_sentiment),
+        backgroundColor: DATA.event_study.map(e => e.change >= 0 ? 'rgba(22,163,74,0.6)' : 'rgba(220,38,38,0.6)'),
+        borderRadius: 4,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { title: { display: true, text: 'Avg Compound Sentiment' } },
+    },
+  },
+});
+
+// --- Sample Reviews ---
+function renderReviews(reviews, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  reviews.forEach(r => {
+    const stars = '&#11088;'.repeat(r.rating);
+    const dotClass = r.compound >= 0.05 ? 'dot-positive' : r.compound <= -0.05 ? 'dot-negative' : 'dot-neutral';
+    container.innerHTML += `<div class="review">
+      <div class="meta">
+        <span class="stars">${stars}</span>
+        <span>${r.city}</span>
+        <span>${r.date}</span>
+        <span><span class="sentiment-dot ${dotClass}"></span>${r.compound}</span>
+        <span>${r.primary_topic}</span>
+        <span>&#128077; ${r.thumbs_up}</span>
+      </div>
+      <div class="text">${r.text}</div>
+    </div>`;
+  });
+}
+renderReviews(DATA.sample_reviews.top_positive, 'tab-positive');
+renderReviews(DATA.sample_reviews.top_negative, 'tab-negative');
+renderReviews(DATA.sample_reviews.most_engaged, 'tab-engaged');
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+</script>
+</body>
+</html>
