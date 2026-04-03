@@ -72,12 +72,6 @@
   .header p { opacity: 0.7; font-size: 15px; position: relative; }
   .header .analyst { font-size: 13px; color: var(--n-400); margin-top: 10px; position: relative; }
   .header .analyst strong { color: var(--waymo-periwinkle); }
-  .header .waymo-logo {
-    position: absolute;
-    top: 32px; right: 36px;
-    z-index: 2;
-  }
-  .header .waymo-logo svg { height: 36px; width: auto; }
 
   /* KPI Cards */
   .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
@@ -192,12 +186,6 @@
 
 <!-- Header -->
 <div class="header">
-  <div class="waymo-logo">
-    <svg viewBox="0 0 580 100" xmlns="http://www.w3.org/2000/svg">
-      <text x="0" y="72" font-family="Inter, Google Sans, sans-serif" font-size="72" font-weight="700" fill="#00E89D" letter-spacing="-2">W</text>
-      <text x="62" y="72" font-family="Inter, Google Sans, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" letter-spacing="-2">aymo</text>
-    </svg>
-  </div>
   <h1><span>Waymo</span> Rider Sentiment Dashboard</h1>
   <p>What do riders actually say about Waymo? Sentiment analysis of Google Play Store reviews.</p>
   <div class="analyst">Prepared by <strong>Michelle Chan</strong> | Waymo Market Expansion Analysis | April 2026</div>
